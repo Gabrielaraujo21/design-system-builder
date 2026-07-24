@@ -2633,11 +2633,19 @@ secs.forEach(s=>so.observe(s));
   showToast('✓ Design System gerado!');
 }
 
+function asciiFileName(name){
+  // remove acentos e caracteres problemáticos no atributo download (ex.: Café -> Cafe)
+  return (name||'arquivo').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w.\-]+/g,'_');
+}
 function downloadFile(content,name){
-  const blob=new Blob([content],{type:'text/html;charset=utf-8'});
+  const safe=asciiFileName(name);
+  const blob=new Blob([content],{type:name&&name.endsWith('.json')?'application/json;charset=utf-8':'text/html;charset=utf-8'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download=name;a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),4000);
+  const a=document.createElement('a');
+  a.href=url; a.download=safe; a.rel='noopener'; a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ if(a.parentNode)a.parentNode.removeChild(a); URL.revokeObjectURL(url); },4000);
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
