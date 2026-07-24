@@ -1031,7 +1031,8 @@ function hexMix(a,b,pct){
   return '#'+[r,g,bl].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
 }
 const RAMP_STEPS=[['010','#FFFFFF',.92],['020','#FFFFFF',.80],['030','#FFFFFF',.64],['040','#FFFFFF',.46],['050','#FFFFFF',.24],['060',null,0],['070','#000000',.22],['080','#000000',.42],['090','#000000',.62],['100','#000000',.78]];
-function ramp(hex){return RAMP_STEPS.map(([t,mixWith,p])=>({tone:t,hex:mixWith?hexMix(hex,mixWith,p):hex.toUpperCase()}))}
+function safeHex(hex){return (typeof hex==='string'&&/^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(hex.trim()))?(hex.trim()[0]==='#'?hex.trim():'#'+hex.trim()):'#888888'}
+function ramp(hex){const h=safeHex(hex);return RAMP_STEPS.map(([t,mixWith,p])=>({tone:t,hex:mixWith?hexMix(h,mixWith,p):h.toUpperCase()}))}
 function wcagBadge(hex){const r=contrastRatio(hex,bestInk(hex));return r>=7?'AAA':r>=4.5?'AA':r>=3?'AA·L':'—'}
 function renderRamps(){
   const el=document.getElementById('rampPanel');if(!el)return;
@@ -1444,16 +1445,48 @@ function serializeProject(){
     S:snapS
   }));
 }
+const DEFAULT_PALETTE=[
+  {hex:'#F97316',name:'Laranja Principal',role:'primary',uso:'CTAs, botões principais, destaques'},
+  {hex:'#1F1F1F',name:'Preto Institucional',role:'ink',uso:'Textos, fundos escuros, contraste'},
+  {hex:'#FFFFFF',name:'Branco',role:'surface',uso:'Fundos claros, textos sobre escuro'},
+  {hex:'#F5F5F5',name:'Cinza Claro',role:'neutral',uso:'Backgrounds secundários, separadores'},
+];
+// Normaliza o objeto S vindo de um .dsproj.json (pode ter vindo de uma IA e conter
+// campos de design malformados ou ausentes). Repara ou descarta o que estiver inválido,
+// para que carregar nunca deixe o builder num estado quebrado.
+function normalizeLoadedS(s){
+  if(!s||typeof s!=='object') return {};
+  const out={...s};
+  const isHex=h=>typeof h==='string'&&/^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(h.trim());
+  if('colors' in out){
+    const valid=Array.isArray(out.colors)?out.colors.filter(c=>c&&typeof c==='object'&&isHex(c.hex)).map(c=>({hex:safeHex(c.hex),name:(c.name||'Cor').toString(),role:COLOR_ROLES[c.role]?c.role:'neutral',uso:(c.uso==null?'':c.uso).toString()})):[];
+    if(valid.length) out.colors=valid; else delete out.colors; // sem cores válidas -> mantém o padrão do builder
+  }
+  ['fontH','fontB'].forEach(k=>{ if(k in out && (typeof out[k]!=='string'||!out[k].trim())) delete out[k]; });
+  if('mood' in out && !MOOD_STYLE[out.mood]) delete out.mood;
+  if('shadow' in out && !(out.shadow in SHADOWS)) delete out.shadow;
+  if('motion' in out && out.motion!=='auto' && !MOTION_PROFILES[out.motion]) delete out.motion;
+  if('btnStyle' in out && !['filled','outlined','pill'].includes(out.btnStyle)) delete out.btnStyle;
+  if('radius' in out && (typeof out.radius!=='number'||isNaN(out.radius))) delete out.radius;
+  if('icons' in out && !Array.isArray(out.icons)) delete out.icons;
+  if('logoExtra' in out && !Array.isArray(out.logoExtra)) out.logoExtra=[];
+  if('mascoteRenders' in out && !Array.isArray(out.mascoteRenders)) out.mascoteRenders=[];
+  ['logos','logoNames','logoBg','fotoRef','dsBg'].forEach(k=>{ if(k in out && (typeof out[k]!=='object'||out[k]===null)) delete out[k]; });
+  if('hasMascote' in out) out.hasMascote=!!out.hasMascote;
+  return out;
+}
 function loadProject(p){
   if(!p||p._type!=='v4-design-system-project'){showToast('⚠ Arquivo de projeto inválido');return}
-  p=JSON.parse(JSON.stringify(p)); // desacopla referências
-  Object.assign(S,p.S||{});
-  Object.entries(p.fields||{}).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v});
-  Object.entries(p.selects||{}).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=v});
-  const setArr=(sel,arr)=>{if(!arr)return;const el=document.querySelectorAll(sel);arr.forEach((v,i)=>{if(el[i])el[i].value=v})};
+  try{ p=JSON.parse(JSON.stringify(p)); }catch(e){ showToast('⚠ Projeto inválido'); return; } // desacopla referências
+  Object.assign(S,normalizeLoadedS(p.S));
+  if(!Array.isArray(S.colors)||!S.colors.length) S.colors=DEFAULT_PALETTE.map(c=>({...c})); // rede de segurança
+  if(p.fields&&typeof p.fields==='object') Object.entries(p.fields).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=(v==null?'':v)});
+  if(p.selects&&typeof p.selects==='object') Object.entries(p.selects).forEach(([id,v])=>{const e=document.getElementById(id);if(e&&v!=null)e.value=v});
+  const setArr=(sel,arr)=>{if(!Array.isArray(arr))return;const el=document.querySelectorAll(sel);arr.forEach((v,i)=>{if(el[i])el[i].value=(v==null?'':v)})};
   setArr('.pillar',p.pillars);setArr('.difere',p.difere);setArr('.rule-good input',p.ruleGood);setArr('.rule-bad input',p.ruleBad);
-  if(p.checkItems&&p.checkItems.length){checkItems=p.checkItems;renderChecklist()}
-  // re-sync UI
+  if(Array.isArray(p.checkItems)&&p.checkItems.length){checkItems=p.checkItems;renderChecklist()}
+  // re-sync UI (blindado — um erro de render não pode abortar o carregamento)
+  try{
   updateBadge();
   renderColorCards();renderFontChips();renderIcoLib();updateRadius();renderComboPreview();renderContrast();renderRamps();renderSemantics();
   // fontes selecionadas
@@ -1472,6 +1505,7 @@ function loadProject(p){
   refreshLogoUI();
   renderMascoteRendersUI();
   renderMoodExplain();renderScaleHint();renderMotionPicker();renderMotionTokens();renderMoodPreview();renderLivePreview();
+  }catch(e){ console.error('loadProject: erro ao renderizar, seguindo mesmo assim',e); }
   showToast('📂 Projeto carregado! Ajuste e gere novamente.');
 }
 function refreshLogoUI(){
@@ -1814,6 +1848,10 @@ function prefill(d){
 }
 // ── EXPORT ───────────────────────────────────────────────
 function exportDS(){
+  try{ exportDSInner(); }
+  catch(e){ console.error('exportDS falhou:',e); showToast('⚠ Não foi possível gerar o arquivo. Abra o Console (F12) e me mande o erro.'); }
+}
+function exportDSInner(){
   const cn=document.getElementById('clientName').value||'Cliente';
   const setor=document.getElementById('setor').value||'';
   const cidade=document.getElementById('cidade').value||'';
