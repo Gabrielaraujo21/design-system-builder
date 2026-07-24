@@ -1265,8 +1265,8 @@ ${(()=>{const bgTxt={light:'usar só sobre fundo claro',dark:'usar só sobre fun
 - **Tom visual:** ${{premium:'sofisticado/premium',energetico:'energético/jovem',solido:'sólido/confiável',acolhedor:'leve/acolhedor'}[S.mood]}
 
 ## Fotografia & geração de imagem
-${fotoSel?`- **Estilo:** ${fotoSel.options[fotoSel.selectedIndex].text}`:''}
-${luzSel?`- **Luz:** ${luzSel.options[luzSel.selectedIndex].text}`:''}
+${selText('fotoEstilo')?`- **Estilo:** ${selText('fotoEstilo')}`:''}
+${selText('fotoLuz')?`- **Luz:** ${selText('fotoLuz')}`:''}
 ${gv('fotoDesc','')?`- **Diretriz:** ${gv('fotoDesc','')}`:''}
 ${ruleGood.map(r=>`- SEMPRE: ${r}`).join('\n')}
 ${ruleBad.map(r=>`- NUNCA: ${r}`).join('\n')}
@@ -1282,6 +1282,7 @@ function copyBrandContext(){copyText(buildBrandContext(),'🧠 Contexto de Marca
 
 // ── v3: PREVIEW VIVO (mini-LP) ───────────────────────────
 function gv(id,fb){const e=document.getElementById(id);return (e&&e.value.trim())||fb}
+function selText(id){const e=document.getElementById(id);return (e&&e.selectedIndex>=0&&e.options[e.selectedIndex])?e.options[e.selectedIndex].text:''}
 function renderLivePreview(){
   const el=document.getElementById('pvCanvas');if(!el)return;
   const cn=gv('clientName','Sua Marca');
@@ -1383,7 +1384,7 @@ function buildLovablePrompt(){
   const ruleGood=Array.from(document.querySelectorAll('.rule-good input')).map(e=>e.value).filter(Boolean);
   const ruleBad=Array.from(document.querySelectorAll('.rule-bad input')).map(e=>e.value).filter(Boolean);
   const fotoSel=document.getElementById('fotoEstilo');
-  const fotoEstilo=fotoSel?fotoSel.options[fotoSel.selectedIndex].text:'';
+  const fotoEstilo=selText('fotoEstilo');
   const fotoDesc=gv('fotoDesc','');
   const moodLabel={premium:'sofisticado e premium',energetico:'energético e jovem',solido:'sólido e confiável',acolhedor:'leve e acolhedor'}[S.mood];
   const pairs=[];
@@ -1481,7 +1482,7 @@ function loadProject(p){
   Object.assign(S,normalizeLoadedS(p.S));
   if(!Array.isArray(S.colors)||!S.colors.length) S.colors=DEFAULT_PALETTE.map(c=>({...c})); // rede de segurança
   if(p.fields&&typeof p.fields==='object') Object.entries(p.fields).forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.value=(v==null?'':v)});
-  if(p.selects&&typeof p.selects==='object') Object.entries(p.selects).forEach(([id,v])=>{const e=document.getElementById(id);if(e&&v!=null)e.value=v});
+  if(p.selects&&typeof p.selects==='object') Object.entries(p.selects).forEach(([id,v])=>{const e=document.getElementById(id);if(!e||v==null)return;if(e.tagName==='SELECT'){if(Array.from(e.options).some(o=>o.value===String(v)))e.value=v;/* valor inexistente -> mantém a opção padrão, evita selectedIndex -1 */}else e.value=v;});
   const setArr=(sel,arr)=>{if(!Array.isArray(arr))return;const el=document.querySelectorAll(sel);arr.forEach((v,i)=>{if(el[i])el[i].value=(v==null?'':v)})};
   setArr('.pillar',p.pillars);setArr('.difere',p.difere);setArr('.rule-good input',p.ruleGood);setArr('.rule-bad input',p.ruleBad);
   if(Array.isArray(p.checkItems)&&p.checkItems.length){checkItems=p.checkItems;renderChecklist()}
@@ -1859,7 +1860,7 @@ function exportDSInner(){
   const naoParece=document.getElementById('naoParece').value||'';
   const pillars=Array.from(document.querySelectorAll('.pillar')).map(e=>e.value).filter(Boolean);
   const logoNota=document.getElementById('logoNota').value||'';
-  const fotoEstilo=document.getElementById('fotoEstilo').options[document.getElementById('fotoEstilo').selectedIndex].text;
+  const fotoEstilo=selText('fotoEstilo');
   const fotoDesc=document.getElementById('fotoDesc').value||'';
   const mascoteNome=document.getElementById('mascoteNome')?.value||'';
   const mascoteEspecie=document.getElementById('mascoteEspecie')?.value||'';
